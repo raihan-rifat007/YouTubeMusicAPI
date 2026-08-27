@@ -1,73 +1,119 @@
-/**
- * Discovery Service
- * Trending music, radio mixes, top artists/tracks by country
- */
-
 import { YTMusic } from "./ytmusic.ts";
 import { LastFM, getTopArtists as lastfmTopArtists, getTopTracks as lastfmTopTracks } from "./lastfm.ts";
 
-export async function getTrendingMusic(country = "United States", ytmusic?: YTMusic) {
+interface TrendingResponse {
+  success: boolean;
+  country?: string;
+  tracks?: any[];
+  error?: string;
+}
+
+interface RadioResponse {
+  success: boolean;
+  seedVideoId?: string;
+  tracks?: any[];
+  error?: string;
+}
+
+interface TopArtistsResponse {
+  success: boolean;
+  country?: string;
+  artists?: any[];
+  error?: string;
+}
+
+interface TopTracksResponse {
+  success: boolean;
+  country?: string;
+  tracks?: any[];
+  error?: string;
+}
+
+export async function getTrendingMusic(country = "United States", ytmusic?: YTMusic): Promise<TrendingResponse> {
   try {
-    if (ytmusic) {
-      const searchQueries = [
-        `${country}n music 2026`,
-        `${country}n songs`,
-        `${country}n hits`,
-        `popular ${country}n music`,
-        `new ${country}n songs 2026`,
-      ];
+    if (!ytmusic) {
+      return { success: false, error: "YouTube Music client not provided" };
+    }
 
-      const allTracks: any[] = [];
-      const seenIds = new Set<string>();
+    const searchQueries = [
+      `${country}n music 2026`,
+      `${country}n songs`,
+      `${country}n hits`,
+      `popular ${country}n music`,
+      `new ${country}n songs 2026`,
+    ];
 
-      for (const query of searchQueries) {
-        if (allTracks.length >= 30) break;
-        const results = await ytmusic.search(query, "songs");
-        if (results.results) {
-          for (const t of results.results) {
-            if (t.videoId && !seenIds.has(t.videoId)) {
-              seenIds.add(t.videoId);
-              allTracks.push({
-                name: t.title,
-                artist: t.artists?.map((a: any) => a.name).join(", "),
-                videoId: t.videoId,
-                thumbnail: t.thumbnails?.[0]?.url,
-                duration: t.duration,
-              });
-            }
-            if (allTracks.length >= 30) break;
+    const allTracks: any[] = [];
+    const seenIds = new Set<string>();
+
+    for (const query of searchQueries) {
+      if (allTracks.length >= 30) break;
+
+      const results = await ytmusic.search(query, "songs");
+
+      if (results.results) {
+        for (const t of results.results) {
+          if (t.videoId && !seenIds.has(t.videoId)) {
+            seenIds.add(t.videoId);
+
+            allTracks.push({
+              name: t.title,
+              artist: t.artists?.map((a: any) => a.name).join(", "),
+              videoId: t.videoId,
+              thumbnail: t.thumbnails?.[0]?.url,
+              duration: t.duration,
+            });
           }
+
+          if (allTracks.length >= 30) break;
         }
       }
-
-      if (allTracks.length > 0) {
-        return { success: true, country, tracks: allTracks };
-      }
     }
+
+    if (allTracks.length > 0) {
+      return { success: true, country, tracks: allTracks };
+    }
+
     return { success: false, error: "Could not fetch trending" };
   } catch (err) {
-    return { success: false, error: String(err) };
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : String(err),
+    };
   }
 }
 
-export async function getRadio(videoId: string, ytmusic: YTMusic) {
+export async function getRadio(videoId: string, ytmusic: YTMusic): Promise<RadioResponse> {
   try {
     const data = await ytmusic.getWatchPlaylist(videoId, undefined, true, false, 50);
+
     if (data.tracks && data.tracks.length > 0) {
       return { success: true, seedVideoId: videoId, tracks: data.tracks };
     }
+
     return { success: false, error: "Could not generate radio" };
   } catch (err) {
-    return { success: false, error: String(err) };
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : String(err),
+    };
   }
 }
 
-export async function getTopArtists(country?: string, limit = 20, ytmusic?: YTMusic) {
+export async function getTopArtists(
+  country?: string,
+  limit = 20,
+  ytmusic?: YTMusic
+): Promise<TopArtistsResponse> {
   try {
     if (country && ytmusic) {
       const searchQueries = [
-        `${country}n artist`, `${country}n singer`, `${country}n rapper`,
-        `${country}n musician`, `artist from ${country}`, `singer from ${country}`,
+        `${country}n artist`,
+        `${country}n singer`,
+        `${country}n rapper`,
+        `${country}n musician`,
+        `artist from ${country}`,
+        `singer from ${country}`,
       ];
 
       const allArtists: any[] = [];
@@ -75,13 +121,21 @@ export async function getTopArtists(country?: string, limit = 20, ytmusic?: YTMu
 
       for (const query of searchQueries) {
         if (allArtists.length >= limit) break;
+
         const results = await ytmusic.search(query, "artists");
+
         if (results.results) {
           for (const a of results.results) {
             if (a.browseId && !seenIds.has(a.browseId)) {
               seenIds.add(a.browseId);
-              allArtists.push({ name: a.title, browseId: a.browseId, thumbnail: a.thumbnails?.[0]?.url });
+
+              allArtists.push({
+                name: a.title,
+                browseId: a.browseId,
+                thumbnail: a.thumbnails?.[0]?.url,
+              });
             }
+
             if (allArtists.length >= limit) break;
           }
         }
@@ -92,19 +146,29 @@ export async function getTopArtists(country?: string, limit = 20, ytmusic?: YTMu
       }
     }
 
-    // Fallback to Last.fm global
     return await lastfmTopArtists(undefined, limit);
   } catch (err) {
-    return { success: false, error: String(err) };
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : String(err),
+    };
   }
 }
 
-export async function getTopTracks(country?: string, limit = 20, ytmusic?: YTMusic) {
+export async function getTopTracks(
+  country?: string,
+  limit = 20,
+  ytmusic?: YTMusic
+): Promise<TopTracksResponse> {
   try {
     if (country && ytmusic) {
       const searchQueries = [
-        `${country}n music`, `${country}n songs`, `${country}n rap`,
-        `${country}n hits 2026`, `music from ${country}`, `songs from ${country}`,
+        `${country}n music`,
+        `${country}n songs`,
+        `${country}n rap`,
+        `${country}n hits 2026`,
+        `music from ${country}`,
+        `songs from ${country}`,
       ];
 
       const allTracks: any[] = [];
@@ -112,11 +176,14 @@ export async function getTopTracks(country?: string, limit = 20, ytmusic?: YTMus
 
       for (const query of searchQueries) {
         if (allTracks.length >= limit) break;
+
         const results = await ytmusic.search(query, "songs");
+
         if (results.results) {
           for (const t of results.results) {
             if (t.videoId && !seenIds.has(t.videoId)) {
               seenIds.add(t.videoId);
+
               allTracks.push({
                 name: t.title,
                 artist: t.artists?.map((a: any) => a.name).join(", "),
@@ -125,6 +192,7 @@ export async function getTopTracks(country?: string, limit = 20, ytmusic?: YTMus
                 duration: t.duration,
               });
             }
+
             if (allTracks.length >= limit) break;
           }
         }
@@ -135,22 +203,32 @@ export async function getTopTracks(country?: string, limit = 20, ytmusic?: YTMus
       }
     }
 
-    // Fallback to Last.fm global
     return await lastfmTopTracks(undefined, limit);
   } catch (err) {
-    return { success: false, error: String(err) };
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : String(err),
+    };
   }
 }
 
-export async function getSimilarTracks(title: string, artist: string, limit: string, youtubeSearch: any) {
-  const similar = await LastFM.getSimilarTracks(title, artist, limit);
-  if ("error" in similar) return { error: (similar as any).error };
+export async function getSimilarTracks(title: string, artist: string, limit: string, youtubeSearch: any): Promise<any[]> {
+  try {
+    const similar = await LastFM.getSimilarTracks(title, artist, limit);
 
-  const ytResults = await Promise.all(
-    (similar as any[]).map(async (t: any) => {
-      const r = await youtubeSearch.searchVideos(`${t.title} ${t.artist}`);
-      return r.results[0] || null;
-    })
-  );
-  return ytResults.filter(Boolean);
+    if ("error" in similar) {
+      return [];
+    }
+
+    const ytResults = await Promise.all(
+      (similar as any[]).map(async (t: any) => {
+        const r = await youtubeSearch.searchVideos(`${t.title} ${t.artist}`);
+        return r.results[0] || null;
+      })
+    );
+
+    return ytResults.filter(Boolean);
+  } catch {
+    return [];
+  }
 }
