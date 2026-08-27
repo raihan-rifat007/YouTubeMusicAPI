@@ -1,7 +1,3 @@
-/**
- * Simple route pattern matching utility
- */
-
 export function matchRoute(pathname: string, pattern: string): Record<string, string> | null {
   const patternParts = pattern.split("/");
   const pathParts = pathname.split("/");
