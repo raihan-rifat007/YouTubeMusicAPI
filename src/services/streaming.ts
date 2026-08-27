@@ -1,7 +1,36 @@
-/**
- * Streaming Service
- * Fetches audio stream URLs from Piped and Invidious instances
- */
+interface StreamResponse {
+  success: boolean;
+  instance?: string;
+  streamingUrls?: any[];
+  metadata?: {
+    id: string;
+    title: string;
+    uploader?: string;
+    author?: string;
+    thumbnail: string;
+    duration: number;
+    views: number;
+  };
+  hlsUrl?: string;
+  error?: string;
+}
+
+interface PipedStream {
+  url: string;
+  quality: string;
+  mimeType: string;
+  bitrate: number;
+  proxyHost: string;
+}
+
+interface InvidiousStream {
+  url: string;
+  directUrl: string;
+  bitrate: number;
+  type: string;
+  audioQuality: string;
+  itag: number;
+}
 
 let instancesCache: any = null;
 let instancesCacheTime = 0;
@@ -19,16 +48,21 @@ const PIPED_INSTANCES = [
   "https://pipedapi.leptons.xyz",
 ];
 
-async function getDynamicInstances() {
+async function getDynamicInstances(): Promise<any> {
   const now = Date.now();
-  if (instancesCache && (now - instancesCacheTime) < CACHE_DURATION) {
+
+  if (instancesCache && now - instancesCacheTime < CACHE_DURATION) {
     return instancesCache;
   }
 
   try {
-    const response = await fetch("https://raw.githubusercontent.com/n-ce/Uma/main/dynamic_instances.json");
+    const response = await fetch(
+      "https://raw.githubusercontent.com/n-ce/Uma/main/dynamic_instances.json"
+    );
     const data = await response.json();
+
     data.piped = PIPED_INSTANCES;
+
     instancesCache = data;
     instancesCacheTime = now;
     return instancesCache;
@@ -40,27 +74,32 @@ async function getDynamicInstances() {
   }
 }
 
-export async function fetchFromPiped(videoId: string) {
+export async function fetchFromPiped(videoId: string): Promise<StreamResponse> {
   const instances = await getDynamicInstances();
   const pipedInstances = instances.piped || [];
 
   for (const instance of pipedInstances) {
     try {
       const response = await fetch(`${instance}/streams/${videoId}`, {
-        headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" },
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        },
       });
+
       const data = await response.json();
 
       if (data?.error) continue;
 
       if (data?.audioStreams?.length) {
         const instanceUrl = new URL(instance);
-        const proxyHost = instanceUrl.host.replace("pipedapi", "pipedproxy").replace("api.", "proxy.");
+        const proxyHost = instanceUrl.host
+          .replace("pipedapi", "pipedproxy")
+          .replace("api.", "proxy.");
 
         return {
           success: true,
           instance,
-          streamingUrls: data.audioStreams.map((s: any) => ({
+          streamingUrls: data.audioStreams.map((s: any): PipedStream => ({
             url: s.url,
             quality: s.quality,
             mimeType: s.mimeType,
@@ -86,7 +125,7 @@ export async function fetchFromPiped(videoId: string) {
   return { success: false, error: "No working Piped instances found" };
 }
 
-export async function fetchFromInvidious(videoId: string) {
+export async function fetchFromInvidious(videoId: string): Promise<StreamResponse> {
   const instances = await getDynamicInstances();
   const invidiousInstances = instances.invidious || [];
 
@@ -96,14 +135,14 @@ export async function fetchFromInvidious(videoId: string) {
       const data = await response.json();
 
       if (data) {
-        const audioFormats = (data.adaptiveFormats || []).filter((f: any) =>
-          f.type?.includes("audio") || f.mimeType?.includes("audio")
+        const audioFormats = (data.adaptiveFormats || []).filter(
+          (f: any) => f.type?.includes("audio") || f.mimeType?.includes("audio")
         );
 
         return {
           success: true,
           instance,
-          streamingUrls: audioFormats.map((f: any) => ({
+          streamingUrls: audioFormats.map((f: any): InvidiousStream => ({
             url: `${instance}/latest_version?id=${videoId}&itag=${f.itag}`,
             directUrl: f.url,
             bitrate: f.bitrate,
@@ -127,4 +166,4 @@ export async function fetchFromInvidious(videoId: string) {
   }
 
   return { success: false, error: "No working Invidious instances found" };
-}
+    }
