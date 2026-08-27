@@ -1,8 +1,3 @@
-/**
- * Content Routes
- * /api/songs/:id, /api/albums/:id, /api/artists/:id, /api/playlists/:id, /api/chain/:id
- */
-
 import { json } from "../helpers/response.ts";
 import { matchRoute } from "../helpers/router.ts";
 import type { YTMusic } from "../services/ytmusic.ts";
@@ -23,7 +18,6 @@ export async function handleContentRoutes(pathname: string, searchParams: URLSea
   params = matchRoute(pathname, "/api/artists/:browseId");
   if (params) return json(await getArtistComplete(params.browseId, ytmusic));
 
-  // /api/artist/:artistId (but NOT /api/artist/info)
   if (pathname !== "/api/artist/info") {
     params = matchRoute(pathname, "/api/artist/:artistId");
     if (params) {
@@ -44,5 +38,5 @@ export async function handleContentRoutes(pathname: string, searchParams: URLSea
   params = matchRoute(pathname, "/api/chain/:videoId");
   if (params) return json(await getFullChain(params.videoId, ytmusic));
 
-  return null; // Not handled
+  return null;
 }
