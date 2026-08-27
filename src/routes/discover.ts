@@ -1,8 +1,3 @@
-/**
- * Discovery Routes
- * /api/charts, /api/moods, /api/trending, /api/radio, /api/similar, /api/top/*
- */
-
 import { json, error } from "../helpers/response.ts";
 import { matchRoute } from "../helpers/router.ts";
 import type { YTMusic } from "../services/ytmusic.ts";
@@ -28,10 +23,11 @@ export async function handleDiscoverRoutes(pathname: string, searchParams: URLSe
     const playlistId = searchParams.get("playlistId") || undefined;
     if (!videoId && !playlistId) return error("Provide videoId or playlistId");
     return json(await ytmusic.getWatchPlaylist(
-      videoId, playlistId,
+      videoId,
+      playlistId,
       searchParams.get("radio") === "true",
       searchParams.get("shuffle") === "true",
-      parseInt(searchParams.get("limit") || "25"),
+      parseInt(searchParams.get("limit") || "25")
     ));
   }
 
@@ -46,7 +42,8 @@ export async function handleDiscoverRoutes(pathname: string, searchParams: URLSe
   }
 
   if (pathname === "/api/similar") {
-    const title = searchParams.get("title"), artist = searchParams.get("artist");
+    const title = searchParams.get("title");
+    const artist = searchParams.get("artist");
     if (!title || !artist) return error("Missing title or artist");
     const result = await getSimilarTracks(title, artist, searchParams.get("limit") || "5", youtubeSearch);
     if ("error" in result) return json({ error: (result as any).error }, 500);
@@ -62,4 +59,4 @@ export async function handleDiscoverRoutes(pathname: string, searchParams: URLSe
   }
 
   return null;
-}
+                }
