@@ -1,9 +1,6 @@
-/**
- * Feed Routes
- * /api/feed/unauthenticated, /api/feed/channels=...
- */
+import { json, error, getCached, cached } from "../helpers/response.ts";
 
-import { json, error } from "../helpers/response.ts";
+const CACHE_TTL = 5 * 60 * 1000;
 
 export async function handleFeedRoutes(pathname: string, searchParams: URLSearchParams): Promise<Response | null> {
   if (pathname === "/api/feed/unauthenticated" || pathname.startsWith("/api/feed/channels=")) {
@@ -11,23 +8,44 @@ export async function handleFeedRoutes(pathname: string, searchParams: URLSearch
     if (pathname.startsWith("/api/feed/channels=")) {
       channelsParam = pathname.replace("/api/feed/channels=", "").split("?")[0];
     }
-    if (!channelsParam) return error("No channel IDs provided");
+    if (!channelsParam) {
+      return error("Please provide at least one channel ID to fetch videos from.");
+    }
 
     const channelIds = channelsParam.split(",").map(s => s.trim()).filter(Boolean);
+    if (channelIds.length === 0) {
+      return error("Please provide valid channel IDs.");
+    }
+
     const preview = searchParams.get("preview") === "1";
+    const cacheKey = `feed_${channelsParam}_${preview}`;
+    const cachedData = getCached(cacheKey);
+    if (cachedData) {
+      return json(cachedData);
+    }
+
     const results: any[] = [];
 
     for (const channelId of channelIds) {
-      results.push(...await fetchChannelVideos(channelId, preview ? 5 : undefined));
+      const videos = await fetchChannelVideos(channelId, preview ? 5 : undefined);
+      results.push(...videos);
     }
 
-    return json(results.filter(item => !item.isShort).sort((a, b) => Number(b.uploaded) - Number(a.uploaded)));
+    if (results.length === 0) {
+      return error("No videos found for the provided channel(s).");
+    }
+
+    const sortedResults = results.filter(item => !item.isShort).sort((a, b) => Number(b.uploaded) - Number(a.uploaded));
+
+    if (sortedResults.length === 0) {
+      return error("No regular videos found (only shorts were available).");
+    }
+
+    return cached(sortedResults, cacheKey, CACHE_TTL / 1000);
   }
 
   return null;
 }
-
-// ─── Channel Video Fetching ─────────────────────────────────
 
 async function fetchChannelVideos(channelId: string, limit?: number): Promise<any[]> {
   try {
@@ -101,4 +119,4 @@ function parseVideo(video: any, channelId: string, channelName: string): any {
     isShort: duration > 0 && duration <= 60,
     thumbnail: video?.thumbnail?.thumbnails?.slice(-1)[0]?.url || "",
   };
-}
+  }
