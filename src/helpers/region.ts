@@ -1,6 +1,5 @@
-/**
- * IP-based region detection for localized results
- */
+const cache = new Map<string, { country: string; language: string; timestamp: number }>();
+const CACHE_TTL = 24 * 60 * 60 * 1000;
 
 const countryLanguageMap: Record<string, string> = {
   TN: "ar", DZ: "ar", MA: "ar", EG: "ar", SA: "ar", AE: "ar", KW: "ar",
@@ -25,6 +24,48 @@ export function getLanguageForCountry(code: string): string {
   return countryLanguageMap[code] || "en";
 }
 
+function getClientIP(req: Request): string | null {
+  const forwardedFor = req.headers.get("x-forwarded-for");
+  if (forwardedFor) {
+    return forwardedFor.split(",")[0].trim();
+  }
+  return null;
+}
+
+function isLocalIP(ip: string): boolean {
+  return ip === "127.0.0.1" || 
+         ip === "::1" ||
+         ip.startsWith("192.168.") ||
+         ip.startsWith("10.") ||
+         ip.startsWith("172.16.") ||
+         ip.startsWith("172.17.") ||
+         ip.startsWith("172.18.") ||
+         ip.startsWith("172.19.") ||
+         ip.startsWith("172.20.") ||
+         ip.startsWith("172.21.") ||
+         ip.startsWith("172.22.") ||
+         ip.startsWith("172.23.") ||
+         ip.startsWith("172.24.") ||
+         ip.startsWith("172.25.") ||
+         ip.startsWith("172.26.") ||
+         ip.startsWith("172.27.") ||
+         ip.startsWith("172.28.") ||
+         ip.startsWith("172.29.") ||
+         ip.startsWith("172.30.") ||
+         ip.startsWith("172.31.");
+}
+
+function cleanCache(): void {
+  const now = Date.now();
+  for (const [key, value] of cache) {
+    if (now - value.timestamp > CACHE_TTL) {
+      cache.delete(key);
+    }
+  }
+}
+
+setInterval(cleanCache, 60 * 60 * 1000);
+
 export async function detectRegionFromIP(req: Request): Promise<{ country: string; language: string } | null> {
   try {
     const cfCountry = req.headers.get("cf-ipcountry") || req.headers.get("x-country");
@@ -32,23 +73,35 @@ export async function detectRegionFromIP(req: Request): Promise<{ country: strin
       return { country: cfCountry, language: getLanguageForCountry(cfCountry) };
     }
 
-    const forwardedFor = req.headers.get("x-forwarded-for");
-    const clientIP = forwardedFor ? forwardedFor.split(",")[0].trim() : null;
-
-    if (!clientIP || clientIP === "127.0.0.1" || clientIP.startsWith("192.168.") || clientIP.startsWith("10.")) {
+    const ip = getClientIP(req);
+    if (!ip || isLocalIP(ip)) {
       return null;
     }
 
-    const geoResponse = await fetch(`http://ip-api.com/json/${clientIP}?fields=countryCode`);
-    if (geoResponse.ok) {
-      const geoData = await geoResponse.json();
-      if (geoData.countryCode) {
-        return { country: geoData.countryCode, language: getLanguageForCountry(geoData.countryCode) };
-      }
+    const cached = cache.get(ip);
+    if (cached) {
+      return { country: cached.country, language: cached.language };
     }
 
-    return null;
+    const geoResponse = await fetch(`http://ip-api.com/json/${ip}?fields=countryCode`);
+    if (!geoResponse.ok) {
+      return null;
+    }
+
+    const geoData = await geoResponse.json();
+    if (!geoData.countryCode) {
+      return null;
+    }
+
+    const result = {
+      country: geoData.countryCode,
+      language: getLanguageForCountry(geoData.countryCode)
+    };
+
+    cache.set(ip, { ...result, timestamp: Date.now() });
+
+    return result;
   } catch {
     return null;
   }
-}
+    }
