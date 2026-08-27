@@ -1,6 +1,7 @@
 <div align="center">
 
-![YouTube API](assets/Logo.png)
+<img src="assets/Logo.png" alt="YouTube API" width="60">
+
 
 # YouTube Music API
 
@@ -635,7 +636,6 @@ YouTube-API/
 ├── Dockerfile                        # Container image
 ├── assets/
 │   ├── Logo.png                      # Branding assets
-│   └── favicon.ico
 ├── src/
 │   ├── helpers/
 │   │   ├── response.ts               # JSON response formatting, CORS handling
@@ -660,10 +660,6 @@ YouTube-API/
 │       ├── stream.ts                 # Audio streaming endpoints
 │       ├── info.ts                   # Lyrics/Info endpoints
 │       └── health.ts                 # Health check & metrics
-├── tests/
-│   ├── unit/                         # Unit tests
-│   ├── integration/                  # Integration tests
-│   └── fixtures/                     # Test data
 └── README.md                         # This file
 ```
 
@@ -1194,9 +1190,9 @@ See [LICENSE](LICENSE) file for full terms.
 | Channel | Link |
 |---------|------|
 | **GitHub Issues** | [raihan-rifat007/YouTube-API/issues](https://github.com/raihan-rifat007/YouTube-API/issues) |
-| **Email** | raihan.rifat007@gmail.com |
+| **Email** | raihanrifat9721@gmail.com |
 | **Discord** | [Join Server](#) |
-| **Twitter** | [@raihan07](#) |
+| **Twitter** | [@raihan_rifat007](#) |
 | **Discussions** | [GitHub Discussions](#) |
 
 ---
@@ -1225,6 +1221,6 @@ See [LICENSE](LICENSE) file for full terms.
 
 **Built with ❤️ by raihan07**
 
-[⭐ Star on GitHub](https://github.com/raihan-rifat007/YouTube-API) • [📧 Email](mailto:raihan.rifat007@gmail.com)
+[⭐ Star on GitHub](https://github.com/raihan-rifat007/YouTube-API) • [📧 Email](mailto:raihanrifat9721@gmail.com)
 
 </div>
