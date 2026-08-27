@@ -641,8 +641,6 @@ YouTube-API/
 │   │   ├── response.ts               # JSON response formatting, CORS handling
 │   │   ├── region.ts                 # GeoIP-based region detection
 │   │   ├── router.ts                 # Route pattern matching engine
-│   │   ├── cache.ts                  # Response caching with TTL
-│   │   └── logger.ts                 # Structured logging
 │   ├── services/
 │   │   ├── ytmusic.ts                # YouTube Music API wrapper
 │   │   ├── ytmusic-parser.ts         # Response parsing & normalization
