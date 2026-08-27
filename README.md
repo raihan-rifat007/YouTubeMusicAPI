@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="assets/Logo.png" alt="YouTube API" width="60">
+<img src="assets/Logo.png" alt="YouTube Music API" width="80">
 
 
 # YouTube Music API
