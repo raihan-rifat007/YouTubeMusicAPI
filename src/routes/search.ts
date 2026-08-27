@@ -1,8 +1,3 @@
-/**
- * Search Routes
- * /api/search, /api/search/suggestions, /api/yt_search
- */
-
 import { json, error } from "../helpers/response.ts";
 import { detectRegionFromIP } from "../helpers/region.ts";
 import type { YTMusic } from "../services/ytmusic.ts";
@@ -20,37 +15,70 @@ export async function handleSearch(req: Request, searchParams: URLSearchParams, 
 
   if (!region) {
     const detected = await detectRegionFromIP(req);
-    if (detected) { region = detected.country; if (!language) language = detected.language; }
+    if (detected) {
+      region = detected.country;
+      if (!language) language = detected.language;
+    }
   }
 
-  if (!query && !continuationToken) return error("Missing 'q' or 'continuationToken'");
-
-  const results = await ytmusic.search(query || "", filter, continuationToken, ignoreSpelling, region, language);
-
-  // Add fallback YouTube IDs for songs
-  if (withFallback && filter === "songs" && results.results?.length > 0) {
-    const enhanced = await Promise.all(
-      results.results.slice(0, 10).map(async (song: any) => {
-        try {
-          const ytResults = await youtubeSearch.searchVideos(`${song.title} ${song.artists?.[0]?.name || ""} official`);
-          const alt = ytResults.results?.find((v: any) => v.channel?.name && !v.channel.name.includes("Topic") && v.id);
-          if (alt) return { ...song, fallbackVideoId: alt.id, fallbackTitle: alt.title };
-        } catch { /* skip */ }
-        return song;
-      })
-    );
-    results.results = [...enhanced, ...results.results.slice(10)];
+  if (!query && !continuationToken) {
+    return error("Please provide a search query or continuation token to perform a search.");
   }
 
-  return json({ query, filter, region, language, ...results });
+  try {
+    const results = await ytmusic.search(query || "", filter, continuationToken, ignoreSpelling, region, language);
+
+    if (withFallback && filter === "songs" && results.results?.length > 0) {
+      const enhanced = await Promise.all(
+        results.results.slice(0, 10).map(async (song: any) => {
+          try {
+            const ytResults = await youtubeSearch.searchVideos(`${song.title} ${song.artists?.[0]?.name || ""} official`);
+            const alt = ytResults.results?.find((v: any) => v.channel?.name && !v.channel.name.includes("Topic") && v.id);
+            if (alt) return { ...song, fallbackVideoId: alt.id, fallbackTitle: alt.title };
+          } catch {
+            return song;
+          }
+        })
+      );
+      results.results = [...enhanced, ...results.results.slice(10)];
+    }
+
+    if (!results.results || results.results.length === 0) {
+      return json({ query, filter, region, language, results: [], message: "No results found for your search query." });
+    }
+
+    return json({ query, filter, region, language, ...results });
+
+  } catch (err) {
+    return error("Unable to fetch search results. Please try again later.", 500);
+  }
 }
 
 export async function handleSearchSuggestions(searchParams: URLSearchParams, ytmusic: YTMusic, youtubeSearch: YouTubeSearch): Promise<Response> {
   const query = searchParams.get("q");
-  if (!query) return error("Missing 'q'");
-  const music = searchParams.get("music");
-  const suggestions = music === "1" ? await ytmusic.getSearchSuggestions(query) : await youtubeSearch.getSuggestions(query);
-  return json({ suggestions, source: music === "1" ? "youtube_music" : "youtube" });
+  if (!query) {
+    return error("Please provide a search query to get suggestions.");
+  }
+
+  if (query.length < 2) {
+    return error("Search query must be at least 2 characters for suggestions.");
+  }
+
+  try {
+    const music = searchParams.get("music");
+    const suggestions = music === "1"
+      ? await ytmusic.getSearchSuggestions(query)
+      : await youtubeSearch.getSuggestions(query);
+
+    if (!suggestions || suggestions.length === 0) {
+      return json({ suggestions: [], source: music === "1" ? "youtube_music" : "youtube", message: "No suggestions found." });
+    }
+
+    return json({ suggestions, source: music === "1" ? "youtube_music" : "youtube" });
+
+  } catch (err) {
+    return error("Unable to fetch search suggestions. Please try again later.", 500);
+  }
 }
 
 export async function handleYTSearch(searchParams: URLSearchParams, youtubeSearch: YouTubeSearch): Promise<Response> {
@@ -58,20 +86,53 @@ export async function handleYTSearch(searchParams: URLSearchParams, youtubeSearc
   const filter = searchParams.get("filter") || "all";
   const continuationToken = searchParams.get("continuationToken") || undefined;
 
-  if (!query && !continuationToken) return error("Missing 'q' or 'continuationToken'");
-
-  const results: unknown[] = [];
-  let nextToken: string | null = null;
-
-  if (continuationToken) {
-    if (filter === "videos") { const r = await youtubeSearch.searchVideos(null, continuationToken); results.push(...r.results); nextToken = r.continuationToken; }
-    else if (filter === "channels") { const r = await youtubeSearch.searchChannels(null, continuationToken); results.push(...r.results); nextToken = r.continuationToken; }
-    else if (filter === "playlists") { const r = await youtubeSearch.searchPlaylists(null, continuationToken); results.push(...r.results); nextToken = r.continuationToken; }
-  } else if (query) {
-    if (filter === "videos" || filter === "all") { const r = await youtubeSearch.searchVideos(query); results.push(...r.results); nextToken = r.continuationToken; }
-    if (filter === "channels" || filter === "all") { const r = await youtubeSearch.searchChannels(query); results.push(...r.results); if (!nextToken) nextToken = r.continuationToken; }
-    if (filter === "playlists" || filter === "all") { const r = await youtubeSearch.searchPlaylists(query); results.push(...r.results); if (!nextToken) nextToken = r.continuationToken; }
+  if (!query && !continuationToken) {
+    return error("Please provide a search query or continuation token to perform a YouTube search.");
   }
 
-  return json({ filter, query, results, continuationToken: nextToken });
-}
+  try {
+    const results: unknown[] = [];
+    let nextToken: string | null = null;
+
+    if (continuationToken) {
+      if (filter === "videos") {
+        const r = await youtubeSearch.searchVideos(null, continuationToken);
+        results.push(...r.results);
+        nextToken = r.continuationToken;
+      } else if (filter === "channels") {
+        const r = await youtubeSearch.searchChannels(null, continuationToken);
+        results.push(...r.results);
+        nextToken = r.continuationToken;
+      } else if (filter === "playlists") {
+        const r = await youtubeSearch.searchPlaylists(null, continuationToken);
+        results.push(...r.results);
+        nextToken = r.continuationToken;
+      }
+    } else if (query) {
+      if (filter === "videos" || filter === "all") {
+        const r = await youtubeSearch.searchVideos(query);
+        results.push(...r.results);
+        nextToken = r.continuationToken;
+      }
+      if (filter === "channels" || filter === "all") {
+        const r = await youtubeSearch.searchChannels(query);
+        results.push(...r.results);
+        if (!nextToken) nextToken = r.continuationToken;
+      }
+      if (filter === "playlists" || filter === "all") {
+        const r = await youtubeSearch.searchPlaylists(query);
+        results.push(...r.results);
+        if (!nextToken) nextToken = r.continuationToken;
+      }
+    }
+
+    if (results.length === 0) {
+      return json({ filter, query, results: [], continuationToken: null, message: "No YouTube results found." });
+    }
+
+    return json({ filter, query, results, continuationToken: nextToken });
+
+  } catch (err) {
+    return error("Unable to fetch YouTube search results. Please try again later.", 500);
+  }
+      }
