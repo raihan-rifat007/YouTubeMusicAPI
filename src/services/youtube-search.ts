@@ -1,7 +1,39 @@
-/**
- * YouTube Search Service
- * Searches YouTube for videos, channels, and playlists via web scraping
- */
+interface VideoResult {
+  type: "video";
+  id: string;
+  title: string;
+  duration: string;
+  channel: { id: string; name: string };
+  thumbnails: any[];
+  publishedTime: string;
+  viewCount: { text: string };
+  link: string;
+}
+
+interface ChannelResult {
+  type: "channel";
+  channelId: string;
+  title: string;
+  thumbnail: string;
+  subscriberCount: string;
+  videoCount: string;
+  url: string;
+}
+
+interface PlaylistResult {
+  type: "playlist";
+  playlistId: string;
+  title: string;
+  thumbnail: string;
+  videoCount: string;
+  author: string;
+  url: string;
+}
+
+interface SearchResponse {
+  results: VideoResult[] | ChannelResult[] | PlaylistResult[];
+  continuationToken: string | null;
+}
 
 export class YouTubeSearch {
   private searchURL = "https://www.youtube.com/results";
@@ -10,7 +42,7 @@ export class YouTubeSearch {
   private apiKey: string | null = null;
   private clientVersion: string | null = null;
 
-  async searchVideos(query: string | null, continuationToken?: string) {
+  async searchVideos(query: string | null, continuationToken?: string): Promise<SearchResponse> {
     if (continuationToken) return this.fetchContinuation(continuationToken, "video");
     if (!query) throw new Error("Query is required for initial search");
 
@@ -20,7 +52,7 @@ export class YouTubeSearch {
     return this.parseVideoResults(html);
   }
 
-  async searchChannels(query: string | null, continuationToken?: string) {
+  async searchChannels(query: string | null, continuationToken?: string): Promise<SearchResponse> {
     if (continuationToken) return this.fetchContinuation(continuationToken, "channel");
     if (!query) throw new Error("Query is required for initial search");
 
@@ -30,7 +62,7 @@ export class YouTubeSearch {
     return this.parseChannelResults(html);
   }
 
-  async searchPlaylists(query: string | null, continuationToken?: string) {
+  async searchPlaylists(query: string | null, continuationToken?: string): Promise<SearchResponse> {
     if (continuationToken) return this.fetchContinuation(continuationToken, "playlist");
     if (!query) throw new Error("Query is required for initial search");
 
@@ -45,129 +77,191 @@ export class YouTubeSearch {
       const url = `${this.suggestionsURL}?ds=yt&client=youtube&q=${encodeURIComponent(query.normalize("NFC"))}`;
       const response = await fetch(url);
       const text = await response.text();
+
       const start = text.indexOf("(");
       const end = text.lastIndexOf(")");
-      if (start === -1 || end === -1) return this.getStaticSuggestions(query);
+
+      if (start === -1 || end === -1) {
+        return this.getStaticSuggestions(query);
+      }
+
       const json = JSON.parse(text.slice(start + 1, end));
-      return (json[1] || []).map((item: any) => Array.isArray(item) ? item[0] : item).slice(0, 10);
+      return (json[1] || [])
+        .map((item: any) => (Array.isArray(item) ? item[0] : item))
+        .slice(0, 10);
     } catch {
       return this.getStaticSuggestions(query);
     }
   }
 
-  // ─── Private ──────────────────────────────────────────────
-
-  private extractAPIConfig(html: string) {
+  private extractAPIConfig(html: string): void {
     const apiKeyMatch = html.match(/"INNERTUBE_API_KEY":"([^"]+)"/);
     const clientVersionMatch = html.match(/"clientVersion":"([^"]+)"/);
+
     if (apiKeyMatch) this.apiKey = apiKeyMatch[1];
     if (clientVersionMatch) this.clientVersion = clientVersionMatch[1];
   }
 
-  private async fetchContinuation(token: string, type: string) {
+  private async fetchContinuation(token: string, type: string): Promise<SearchResponse> {
     if (!this.apiKey) throw new Error("API key not initialized");
+
     const response = await fetch(`${this.continuationURL}?key=${this.apiKey}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ continuation: token, context: { client: { clientName: "WEB", clientVersion: this.clientVersion || "2.20231219.01.00" } } }),
+      body: JSON.stringify({
+        continuation: token,
+        context: {
+          client: {
+            clientName: "WEB",
+            clientVersion: this.clientVersion || "2.20231219.01.00",
+          },
+        },
+      }),
     });
+
     const data = await response.json();
     return this.parseContinuationResults(data, type);
   }
 
-  private parseVideoResults(html: string) {
-    const results: any[] = [];
+  private parseVideoResults(html: string): SearchResponse {
+    const results: VideoResult[] = [];
     let continuationToken: string | null = null;
+
     const jsonMatch = html.match(/var ytInitialData = ({.+?});/);
     if (!jsonMatch) return { results, continuationToken };
 
     const data = JSON.parse(jsonMatch[1]);
-    const sections = data?.contents?.twoColumnSearchResultsRenderer?.primaryContents?.sectionListRenderer?.contents || [];
+    const sections =
+      data?.contents?.twoColumnSearchResultsRenderer?.primaryContents?.sectionListRenderer
+        ?.contents || [];
+
     const items = sections[0]?.itemSectionRenderer?.contents || [];
+
     for (const item of items) {
-      if (item.videoRenderer) results.push(this.parseVideoRenderer(item.videoRenderer));
+      if (item.videoRenderer) {
+        results.push(this.parseVideoRenderer(item.videoRenderer));
+      }
     }
+
     continuationToken = this.extractContinuationToken(data);
     return { results, continuationToken };
   }
 
-  private parseChannelResults(html: string) {
-    const results: any[] = [];
+  private parseChannelResults(html: string): SearchResponse {
+    const results: ChannelResult[] = [];
     let continuationToken: string | null = null;
+
     const jsonMatch = html.match(/var ytInitialData = ({.+?});/);
     if (!jsonMatch) return { results, continuationToken };
 
     const data = JSON.parse(jsonMatch[1]);
-    const sections = data?.contents?.twoColumnSearchResultsRenderer?.primaryContents?.sectionListRenderer?.contents || [];
+    const sections =
+      data?.contents?.twoColumnSearchResultsRenderer?.primaryContents?.sectionListRenderer
+        ?.contents || [];
+
     for (const section of sections) {
-      for (const item of (section?.itemSectionRenderer?.contents || [])) {
-        if (item.channelRenderer) results.push(this.parseChannelRenderer(item.channelRenderer));
+      for (const item of section?.itemSectionRenderer?.contents || []) {
+        if (item.channelRenderer) {
+          results.push(this.parseChannelRenderer(item.channelRenderer));
+        }
       }
     }
+
     continuationToken = this.extractContinuationToken(data);
     return { results, continuationToken };
   }
 
-  private parsePlaylistResults(html: string) {
-    const results: any[] = [];
+  private parsePlaylistResults(html: string): SearchResponse {
+    const results: PlaylistResult[] = [];
     let continuationToken: string | null = null;
+
     const jsonMatch = html.match(/var ytInitialData = ({.+?});/);
     if (!jsonMatch) return { results, continuationToken };
 
     const data = JSON.parse(jsonMatch[1]);
-    const sections = data?.contents?.twoColumnSearchResultsRenderer?.primaryContents?.sectionListRenderer?.contents || [];
+    const sections =
+      data?.contents?.twoColumnSearchResultsRenderer?.primaryContents?.sectionListRenderer
+        ?.contents || [];
+
     for (const section of sections) {
-      for (const item of (section?.itemSectionRenderer?.contents || [])) {
-        if (item.playlistRenderer) results.push(this.parsePlaylistRenderer(item.playlistRenderer));
+      for (const item of section?.itemSectionRenderer?.contents || []) {
+        if (item.playlistRenderer) {
+          results.push(this.parsePlaylistRenderer(item.playlistRenderer));
+        }
       }
     }
+
     continuationToken = this.extractContinuationToken(data);
     return { results, continuationToken };
   }
 
-  private parseContinuationResults(data: any, type: string) {
+  private parseContinuationResults(data: any, type: string): SearchResponse {
     const results: any[] = [];
     let continuationToken: string | null = null;
+
     const actions = data?.onResponseReceivedCommands || [];
+
     for (const action of actions) {
       const items = action?.appendContinuationItemsAction?.continuationItems || [];
+
       for (const item of items) {
         if (item.continuationItemRenderer) {
-          continuationToken = item.continuationItemRenderer?.continuationEndpoint?.continuationCommand?.token;
+          continuationToken =
+            item.continuationItemRenderer?.continuationEndpoint?.continuationCommand?.token;
           continue;
         }
-        if (type === "video" && item.videoRenderer) results.push(this.parseVideoRenderer(item.videoRenderer));
-        else if (type === "channel" && item.channelRenderer) results.push(this.parseChannelRenderer(item.channelRenderer));
-        else if (type === "playlist" && item.playlistRenderer) results.push(this.parsePlaylistRenderer(item.playlistRenderer));
+
+        if (type === "video" && item.videoRenderer) {
+          results.push(this.parseVideoRenderer(item.videoRenderer));
+        } else if (type === "channel" && item.channelRenderer) {
+          results.push(this.parseChannelRenderer(item.channelRenderer));
+        } else if (type === "playlist" && item.playlistRenderer) {
+          results.push(this.parsePlaylistRenderer(item.playlistRenderer));
+        }
+
         if (item.itemSectionRenderer?.contents) {
           for (const inner of item.itemSectionRenderer.contents) {
-            if (type === "video" && inner.videoRenderer) results.push(this.parseVideoRenderer(inner.videoRenderer));
-            else if (type === "channel" && inner.channelRenderer) results.push(this.parseChannelRenderer(inner.channelRenderer));
-            else if (type === "playlist" && inner.playlistRenderer) results.push(this.parsePlaylistRenderer(inner.playlistRenderer));
+            if (type === "video" && inner.videoRenderer) {
+              results.push(this.parseVideoRenderer(inner.videoRenderer));
+            } else if (type === "channel" && inner.channelRenderer) {
+              results.push(this.parseChannelRenderer(inner.channelRenderer));
+            } else if (type === "playlist" && inner.playlistRenderer) {
+              results.push(this.parsePlaylistRenderer(inner.playlistRenderer));
+            }
           }
         }
       }
     }
+
     return { results, continuationToken };
   }
 
   private extractContinuationToken(data: any): string | null {
-    const sections = data?.contents?.twoColumnSearchResultsRenderer?.primaryContents?.sectionListRenderer?.contents || [];
+    const sections =
+      data?.contents?.twoColumnSearchResultsRenderer?.primaryContents?.sectionListRenderer
+        ?.contents || [];
+
     for (const section of sections) {
       if (section.continuationItemRenderer) {
-        return section.continuationItemRenderer?.continuationEndpoint?.continuationCommand?.token || null;
+        return (
+          section.continuationItemRenderer?.continuationEndpoint?.continuationCommand?.token || null
+        );
       }
     }
+
     return null;
   }
 
-  private parseVideoRenderer(v: any) {
+  private parseVideoRenderer(v: any): VideoResult {
     return {
       type: "video",
       id: v.videoId,
       title: v.title?.runs?.[0]?.text,
       duration: v.lengthText?.simpleText,
-      channel: { id: v.ownerText?.runs?.[0]?.navigationEndpoint?.browseEndpoint?.browseId, name: v.ownerText?.runs?.[0]?.text },
+      channel: {
+        id: v.ownerText?.runs?.[0]?.navigationEndpoint?.browseEndpoint?.browseId,
+        name: v.ownerText?.runs?.[0]?.text,
+      },
       thumbnails: v.thumbnail?.thumbnails,
       publishedTime: v.publishedTimeText?.simpleText,
       viewCount: { text: v.viewCountText?.simpleText },
@@ -175,7 +269,7 @@ export class YouTubeSearch {
     };
   }
 
-  private parseChannelRenderer(c: any) {
+  private parseChannelRenderer(c: any): ChannelResult {
     return {
       type: "channel",
       channelId: c.channelId,
@@ -187,7 +281,7 @@ export class YouTubeSearch {
     };
   }
 
-  private parsePlaylistRenderer(p: any) {
+  private parsePlaylistRenderer(p: any): PlaylistResult {
     return {
       type: "playlist",
       playlistId: p.playlistId,
@@ -202,4 +296,4 @@ export class YouTubeSearch {
   private getStaticSuggestions(query: string): string[] {
     return [query, `${query} video`, `${query} 2024`, `${query} tutorial`, `${query} song`];
   }
-}
+      }
