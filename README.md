@@ -632,8 +632,7 @@ YouTube-API/
 ├── ui.ts                             # Web UI component
 ├── deno.json                         # Deno configuration
 ├── deno.lock                         # Dependency lock file
-├── docker-compose.yml                # Docker orchestration
-├── Dockerfile                        # Container image
+├── .gitignore                        # Git ignore
 ├── assets/
 │   ├── Logo.png                      # Branding assets
 ├── src/
