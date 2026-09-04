@@ -1,7 +1,7 @@
 import { YTMusic } from "./src/services/ytmusic.ts";
 import { YouTubeSearch } from "./src/services/youtube-search.ts";
 import { json, corsHeaders } from "./src/helpers/response.ts";
-import { html as uiHtml } from "./ui.ts";
+import { getHtml } from "./ui.ts";
 import { handleSearch, handleSearchSuggestions, handleYTSearch } from "./src/routes/search.ts";
 import { handleContentRoutes } from "./src/routes/content.ts";
 import { handleDiscoverRoutes } from "./src/routes/discover.ts";
@@ -26,7 +26,7 @@ async function handler(req: Request): Promise<Response> {
   const { pathname, searchParams } = url;
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
   try {
-    if (pathname === "/") return new Response(uiHtml, { headers: { "Content-Type": "text/html", ...corsHeaders } });
+    if (pathname === "/") return new Response(getHtml(), { headers: { "Content-Type": "text/html", ...corsHeaders } });
     if (pathname === "/assets/logo.png" || pathname === "/assets/Logo.png") {
       try {
         const logoPath = new URL("./assets/Logo.png", import.meta.url).pathname.replace(/^\/([A-Z]:)/, "$1");
