@@ -2,7 +2,6 @@
 
 <img src="assets/Logo.png" alt="YouTube Music API" width="80">
 
-
 # YouTube Music API
 
 **Enterprise-Grade REST API for YouTube Music Metadata, Streaming & Lyrical Content**
