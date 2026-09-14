@@ -1,4 +1,3 @@
-// Auto-generated: UI served from ui.html
 let _cached: string | null = null;
 
 export function getHtml(): string {
@@ -11,6 +10,4 @@ export function getHtml(): string {
     return "<h1>UI not found</h1>";
   }
 }
-
-// Legacy export for compatibility
 export const html = getHtml();
