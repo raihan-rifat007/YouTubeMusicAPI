@@ -61,3 +61,5 @@ async function handler(req: Request): Promise<Response> {
 const PORT = parseInt(Deno.env.get("PORT") || "8000");
 console.log(`YouTube API v2.1.0 running on http://localhost:${PORT}`);
 Deno.serve({ port: PORT }, handler);
+
+
