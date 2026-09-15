@@ -17,6 +17,59 @@ export async function handleDownload(searchParams: URLSearchParams): Promise<Res
   const title = searchParams.get("title") || "audio";
   if (!id) return error("Please provide a video ID to download.");
 
+  const safeTitle = title.replace(/[^a-zA-Z0-9\s\-_]/g, "").trim().substring(0, 100) || "audio";
+
+  // ── PRIMARY: cobalt.tools → real MP3 ─────────────────────────────────────
+  // ROOT CAUSE OF BUG: When Piped/Invidious instances fail they return JSON
+  // error bodies. The old code piped that JSON body to the client with
+  // Content-Type still set to audio/webm — browser saved a .webm file that
+  // was actually JSON text. cobalt.tools gives a proper MP3 stream URL and
+  // we validate Content-Type before piping.
+  try {
+    const cobaltRes = await fetch("https://api.cobalt.tools/", {
+      method: "POST",
+      headers: {
+        "Accept": "application/json",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        url: `https://www.youtube.com/watch?v=${id}`,
+        downloadMode: "audio",
+        audioFormat: "mp3",
+        filenameStyle: "basic",
+      }),
+    });
+
+    if (cobaltRes.ok) {
+      const cobaltData = await cobaltRes.json();
+      if (cobaltData.url) {
+        const mp3Res = await fetch(cobaltData.url, {
+          headers: {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+          },
+        });
+
+        if (mp3Res.ok) {
+          const ct = mp3Res.headers.get("Content-Type") || "";
+          if (!ct.includes("application/json") && !ct.includes("text/html")) {
+            const respHeaders = new Headers({
+              "Access-Control-Allow-Origin": "*",
+              "Content-Type": "audio/mpeg",
+              "Content-Disposition": `attachment; filename="${safeTitle}.mp3"`,
+              "Cache-Control": "public, max-age=3600",
+            });
+            const cl = mp3Res.headers.get("Content-Length");
+            if (cl) respHeaders.set("Content-Length", cl);
+            return new Response(mp3Res.body, { status: 200, headers: respHeaders });
+          }
+        }
+      }
+    }
+  } catch {
+    // cobalt.tools unreachable — fall through to piped/invidious
+  }
+
+  // ── FALLBACK: Piped / Invidious ───────────────────────────────────────────
   let streamData: any = null;
   const piped = await fetchFromPiped(id);
   if (piped.success && piped.streamingUrls?.length) {
@@ -26,7 +79,9 @@ export async function handleDownload(searchParams: URLSearchParams): Promise<Res
     if (invidious.success && invidious.streamingUrls?.length) streamData = invidious;
   }
 
-  if (!streamData) return json({ success: false, error: "Unable to find audio stream." }, 404);
+  if (!streamData) {
+    return json({ success: false, error: "Unable to find audio stream. Please try again later." }, 404);
+  }
 
   const urls: any[] = streamData.streamingUrls;
   const best = urls.reduce((a: any, b: any) => ((b.bitrate || 0) > (a.bitrate || 0) ? b : a), urls[0]);
@@ -41,15 +96,23 @@ export async function handleDownload(searchParams: URLSearchParams): Promise<Res
         "Origin": "https://www.youtube.com",
       },
     });
-    if (!audioRes.ok) return json({ success: false, error: `Stream fetch failed: ${audioRes.status}` }, 502);
 
-    const safeTitle = title.replace(/[^a-zA-Z0-9\s\-_]/g, "").trim().substring(0, 100) || "audio";
-    const contentType = audioRes.headers.get("Content-Type") || "audio/webm";
-    const ext = contentType.includes("mp4") ? "m4a" : "webm";
+    if (!audioRes.ok) {
+      return json({ success: false, error: `Stream fetch failed: ${audioRes.status}` }, 502);
+    }
+
+    const ct = audioRes.headers.get("Content-Type") || "";
+
+    // CRITICAL: Never pipe a JSON/HTML error response as an audio file
+    if (ct.includes("application/json") || ct.includes("text/html")) {
+      return json({ success: false, error: "Stream provider returned a non-audio response. Please try again." }, 502);
+    }
+
+    const ext = ct.includes("mp4") ? "m4a" : ct.includes("mpeg") ? "mp3" : "webm";
 
     const headers = new Headers({
       "Access-Control-Allow-Origin": "*",
-      "Content-Type": contentType,
+      "Content-Type": ct || "audio/webm",
       "Content-Disposition": `attachment; filename="${safeTitle}.${ext}"`,
       "Cache-Control": "public, max-age=3600",
     });
@@ -57,8 +120,8 @@ export async function handleDownload(searchParams: URLSearchParams): Promise<Res
     if (cl) headers.set("Content-Length", cl);
 
     return new Response(audioRes.body, { status: 200, headers });
-  } catch (err) {
-    return json({ success: false, error: "Download failed." }, 502);
+  } catch {
+    return json({ success: false, error: "Download failed. Please try again." }, 502);
   }
 }
 
