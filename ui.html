@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>YT Music API</title>
+<title>YTMusic API</title>
 <link rel="icon" href="/assets/logo.png">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
 <style>
@@ -1974,6 +1974,282 @@
     }
   }
 
+  /* ── VIEW TOGGLE ──────────────────────────────────────────────────── */
+  .vtog {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    background: var(--s2);
+    border: 1px solid var(--bd2);
+    border-radius: 9px;
+    padding: 3px;
+    flex-shrink: 0;
+  }
+
+  .vt {
+    width: 30px;
+    height: 30px;
+    border: none;
+    background: transparent;
+    border-radius: 7px;
+    color: var(--di);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: var(--t);
+  }
+
+  .vt:hover { color: var(--mu); }
+
+  .vt.on {
+    background: var(--s3);
+    color: var(--tx);
+  }
+
+  .vt svg {
+    width: 14px;
+    height: 14px;
+    stroke: currentColor;
+    fill: none;
+    stroke-width: 2;
+  }
+
+  /* ── GRID CARDS ────────────────────────────────────────────────────── */
+  .gc {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(192px, 1fr));
+    gap: 13px;
+  }
+
+  .gcard {
+    background: var(--s1);
+    border: 1px solid var(--bd);
+    border-radius: 12px;
+    overflow: hidden;
+    cursor: pointer;
+    transition: var(--t);
+    position: relative;
+    animation: fu 0.25s cubic-bezier(0.4,0,0.2,1);
+  }
+
+  .gcard:hover {
+    background: var(--s2);
+    border-color: var(--bd2);
+    transform: translateY(-3px);
+    box-shadow: 0 14px 44px rgba(0,0,0,0.65);
+  }
+
+  .gcard.on {
+    border-color: var(--bd3);
+    background: var(--s2);
+  }
+
+  .gcard.on .gttl { font-weight: 700; }
+
+  .gct {
+    position: relative;
+    padding-top: 56.25%;
+    background: var(--s2);
+    overflow: hidden;
+  }
+
+  .gct img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transition: transform 0.38s ease;
+  }
+
+  .gcard:hover .gct img { transform: scale(1.05); }
+
+  .gct-ov {
+    position: absolute;
+    inset: 0;
+    background: transparent;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background var(--t);
+  }
+
+  .gcard:hover .gct-ov {
+    background: linear-gradient(180deg, rgba(0,0,0,0.08) 0%, rgba(0,0,0,0.55) 100%);
+  }
+
+  .gplay {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: var(--tx);
+    border: none;
+    color: #000;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transform: scale(0.82);
+    transition: all 0.2s cubic-bezier(0.34,1.56,0.64,1);
+    box-shadow: 0 4px 20px rgba(255,255,255,0.22);
+    flex-shrink: 0;
+  }
+
+  .gcard:hover .gplay {
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  .gplay:hover {
+    background: var(--ah);
+    transform: scale(1.1) !important;
+  }
+
+  .gplay svg {
+    width: 15px;
+    height: 15px;
+    fill: currentColor;
+    stroke: none;
+    margin-left: 2px;
+  }
+
+  .gdur {
+    position: absolute;
+    bottom: 7px;
+    right: 8px;
+    background: rgba(0,0,0,0.82);
+    border-radius: 4px;
+    padding: 2px 6px;
+    font-size: 0.6rem;
+    font-weight: 700;
+    color: #ccc;
+    font-family: ui-monospace, monospace;
+    letter-spacing: 0.3px;
+  }
+
+  .gtyp {
+    position: absolute;
+    top: 7px;
+    left: 7px;
+    border-radius: 5px;
+    padding: 2px 7px;
+    font-size: 0.56rem;
+    font-weight: 800;
+    letter-spacing: 0.6px;
+    text-transform: uppercase;
+    border: 1px solid;
+  }
+
+  .gtyp.t-song     { background: rgba(59,130,246,0.15); color: #7db8f7; border-color: rgba(59,130,246,0.28); }
+  .gtyp.t-album    { background: rgba(168,85,247,0.15); color: #c084fc; border-color: rgba(168,85,247,0.28); }
+  .gtyp.t-artist   { background: rgba(34,197,94,0.15);  color: #4ade80; border-color: rgba(34,197,94,0.28);  }
+  .gtyp.t-playlist { background: rgba(249,115,22,0.15); color: #fb923c; border-color: rgba(249,115,22,0.28); }
+  .gtyp.t-video    { background: rgba(239,68,68,0.15);  color: #f87171; border-color: rgba(239,68,68,0.28);  }
+
+  .ginfo {
+    padding: 10px 12px 5px;
+  }
+
+  .gttl {
+    font-size: 0.82rem;
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    letter-spacing: -0.01em;
+    margin-bottom: 3px;
+    color: var(--tx2);
+  }
+
+  .gart {
+    font-size: 0.71rem;
+    color: var(--mu);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .gacts {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 8px 10px 10px;
+  }
+
+  .gab {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    padding: 7px 10px;
+    border-radius: 8px;
+    border: 1px solid var(--bd2);
+    background: transparent;
+    color: var(--mu);
+    font-size: 0.71rem;
+    font-weight: 700;
+    font-family: inherit;
+    cursor: pointer;
+    transition: var(--t);
+    white-space: nowrap;
+  }
+
+  .gab:hover {
+    background: var(--s3);
+    color: var(--tx);
+    border-color: var(--bd3);
+  }
+
+  .gab.done {
+    color: #4ade80;
+    border-color: rgba(74,222,128,0.3);
+    background: rgba(74,222,128,0.06);
+  }
+
+  .gab svg {
+    width: 11px;
+    height: 11px;
+    stroke: currentColor;
+    fill: none;
+    stroke-width: 2.2;
+    flex-shrink: 0;
+  }
+
+  .glike {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    border: 1px solid var(--bd2);
+    background: transparent;
+    color: var(--di);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: var(--t);
+    flex-shrink: 0;
+  }
+
+  .glike:hover { background: var(--s3); color: var(--mu); border-color: var(--bd3); }
+
+  .glike.on {
+    color: var(--tx);
+    border-color: var(--bd3);
+  }
+
+  .glike.on svg { fill: currentColor; }
+
+  .glike svg {
+    width: 12px;
+    height: 12px;
+    stroke: currentColor;
+    fill: none;
+    stroke-width: 2;
+  }
+
   @media (max-width: 560px) {
     .pb {
       grid-template-columns: minmax(0, 1fr) auto;
@@ -2050,6 +2326,14 @@
           <input id="SI" placeholder="Search songs, artists, albums..." autocomplete="off">
           <svg class="si" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
           <span class="kbd">Enter</span>
+        </div>
+        <div class="vtog">
+          <button class="vt on" data-v="grid" onclick="setView('grid')" title="Grid view">
+            <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>
+          </button>
+          <button class="vt" data-v="list" onclick="setView('list')" title="List view">
+            <svg viewBox="0 0 24 24"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+          </button>
         </div>
       </div>
       <div class="fr">
@@ -2231,6 +2515,8 @@
     var dOk = false;
     var discOk = false;
     var chartOk = false;
+    var viewMode = 'grid';
+    var dlStates = {};
 
     function onYouTubeIframeAPIReady() {
       yt = new YT.Player('ytplayer', {
@@ -2517,6 +2803,9 @@
       document.querySelectorAll('.rr').forEach(function (el, i) {
         el.classList.toggle('on', i === idx);
       });
+      document.querySelectorAll('.gcard').forEach(function (el, i) {
+        el.classList.toggle('on', i === idx);
+      });
     }
 
     async function loadLyr(s) {
@@ -2649,11 +2938,11 @@
       toast('Starting download...');
       var a = document.createElement('a');
       a.href = '/api/download?id=' + encodeURIComponent(vi) + '&title=' + encodeURIComponent(s.title || 'audio');
-      a.download = (s.title || 'audio') + '.webm';
+      a.download = (s.title || 'audio') + '.mp3';
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
-      toast('Download started!');
+      toast('MP3 download started!');
       setTimeout(function () {
         dOk = false;
         g('DLBTN').classList.remove('dl');
@@ -2665,10 +2954,10 @@
       var s = songs[i];
       var vi = vid(s);
       if (!vi) return;
-      toast('Downloading...');
+      toast('Downloading MP3...');
       var a = document.createElement('a');
       a.href = '/api/download?id=' + encodeURIComponent(vi) + '&title=' + encodeURIComponent(s.title || 'audio');
-      a.download = (s.title || 'audio') + '.webm';
+      a.download = (s.title || 'audio') + '.mp3';
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -2787,7 +3076,119 @@
           + '</div>';
         return;
       }
-      g('RES').innerHTML = '<div class="rl fu">' + rowsH(songs) + '</div>';
+      g('RES').innerHTML = viewMode === 'grid'
+        ? rowsGrid(songs)
+        : '<div class="rl fu">' + rowsH(songs) + '</div>';
+    }
+
+    function setView(mode) {
+      viewMode = mode;
+      document.querySelectorAll('.vt').forEach(function (b) { b.classList.remove('on'); });
+      var btn = document.querySelector('.vt[data-v="' + mode + '"]');
+      if (btn) btn.classList.add('on');
+      if (songs.length) renderRes();
+    }
+
+    function typeCls(type, bid) {
+      bid = bid || '';
+      if (bid.startsWith('VL') || type === 'playlist') return 't-playlist';
+      if ((bid.startsWith('MPRE') && !bid.startsWith('VL')) || type === 'album') return 't-album';
+      if (bid.startsWith('UC') || type === 'artist') return 't-artist';
+      if (type === 'video') return 't-video';
+      return 't-song';
+    }
+
+    function typeLabel(type, bid) {
+      bid = bid || '';
+      if (bid.startsWith('VL') || type === 'playlist') return 'Playlist';
+      if ((bid.startsWith('MPRE') && !bid.startsWith('VL')) || type === 'album') return 'Album';
+      if (bid.startsWith('UC') || type === 'artist') return 'Artist';
+      if (type === 'video') return 'Video';
+      return 'Song';
+    }
+
+    function toggleLikeById(vi) {
+      if (liked.has(vi)) liked.delete(vi);
+      else liked.add(vi);
+      var isNowLiked = liked.has(vi);
+      document.querySelectorAll('.glike').forEach(function (btn) {
+        if (btn.dataset.vi === vi) btn.classList.toggle('on', isNowLiked);
+      });
+      toast(isNowLiked ? 'Liked!' : 'Removed from liked');
+    }
+
+    function dlRowGrid(i) {
+      var s = songs[i];
+      var vi = vid(s);
+      if (!vi) return;
+      var btn = document.querySelector('.gab[data-i="' + i + '"]');
+      if (btn) {
+        btn.classList.add('done');
+        btn.innerHTML = '<svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>Done';
+        setTimeout(function () {
+          if (btn) {
+            btn.classList.remove('done');
+            btn.innerHTML = '<svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>MP3';
+          }
+        }, 3000);
+      }
+      var a = document.createElement('a');
+      a.href = '/api/download?id=' + encodeURIComponent(vi) + '&title=' + encodeURIComponent(s.title || 'audio');
+      a.download = (s.title || 'audio') + '.mp3';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      toast('MP3 downloading...');
+    }
+
+    function rowsGrid(list) {
+      return '<div class="gc fu">' + list.map(function (s, i) {
+        var type = s.resultType || s.type || 'song';
+        var th = thumb(s);
+        var ar = arStr(s);
+        var bid = s.browseId || '';
+        var vi = vid(s);
+        var isPl = bid.startsWith('VL') || type === 'playlist';
+        var isAl = (bid.startsWith('MPRE') && !isPl) || type === 'album';
+        var isAr = bid.startsWith('UC') || type === 'artist';
+        var canPlay = !!(vi && (type === 'song' || type === 'video'));
+        var clk = '';
+        if (canPlay) clk = 'playSong(' + i + ')';
+        else if (isPl && bid) clk = "vPl('" + bid + "','" + encodeURIComponent(th) + "','" + encodeURIComponent(s.title || '') + "')";
+        else if (isAl && bid) clk = "vAl('" + bid + "','" + encodeURIComponent(th) + "','" + encodeURIComponent(s.title || '') + "')";
+        else if (bid) clk = "vAr('" + bid + "','" + encodeURIComponent(th) + "','" + encodeURIComponent(s.title || '') + "')";
+        var tc = typeCls(type, bid);
+        var tl = typeLabel(type, bid);
+        var isLiked = vi && liked.has(vi);
+        return '<div class="gcard' + (i === idx ? ' on' : '') + '" onclick="' + clk + '">'
+          + '<div class="gct">'
+          + '<img src="' + th + '" loading="lazy" onerror="this.style.opacity=\'0\'">'
+          + '<div class="gct-ov">'
+          + (canPlay
+            ? '<button class="gplay" onclick="event.stopPropagation();playSong(' + i + ')">'
+              + '<svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>'
+              + '</button>'
+            : '')
+          + '</div>'
+          + (s.duration ? '<span class="gdur">' + esc(s.duration) + '</span>' : '')
+          + '<span class="gtyp ' + tc + '">' + tl + '</span>'
+          + '</div>'
+          + '<div class="ginfo">'
+          + '<div class="gttl">' + esc(s.title || s.name || 'Unknown') + '</div>'
+          + '<div class="gart">' + esc(ar || tl) + '</div>'
+          + '</div>'
+          + (canPlay
+            ? '<div class="gacts">'
+              + '<button class="gab" data-i="' + i + '" onclick="event.stopPropagation();dlRowGrid(' + i + ')">'
+              + '<svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>MP3'
+              + '</button>'
+              + '<button class="glike' + (isLiked ? ' on' : '') + '" data-vi="' + (vi || '') + '" onclick="event.stopPropagation();toggleLikeById(\'' + (vi || '') + '\')">'
+              + '<svg viewBox="0 0 24 24"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>'
+              + '</button>'
+              + '</div>'
+            : '')
+          + '</div>';
+      }).join('') + '</div>';
     }
 
     function rowsH(list) {
