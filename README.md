@@ -1,153 +1,190 @@
 <div align="center">
 
-<img src="assets/Logo.png" alt="YTMusic API" width="72">
+<img src="assets/Logo.png" alt="Logo" width="80" />
 
-# YouTube Music API
+<h1>YouTube Music API</h1>
 
-**Zero-config REST API for YouTube Music — search, stream, lyrics, download**
+<p><strong>Zero-config YouTube Music REST API — search · stream · lyrics · download</strong></p>
 
-[![Deno](https://img.shields.io/badge/Deno-2.0+-000000?logo=deno&logoColor=white&style=for-the-badge)](https://deno.land)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-3178C6?logo=typescript&logoColor=white&style=for-the-badge)](https://www.typescriptlang.org/)
-[![Version](https://img.shields.io/badge/version-7.0.0-white?style=for-the-badge)](deno.json)
-[![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)](LICENSE)
+[![Deno](https://img.shields.io/badge/Deno-2.0+-000?logo=deno&logoColor=white&style=flat-square)](https://deno.land)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6?logo=typescript&logoColor=white&style=flat-square)](https://www.typescriptlang.org)
+[![Deploy](https://img.shields.io/badge/Deno_Deploy-Live-00C4B4?logo=deno&style=flat-square)](https://deno.com/deploy)
+[![License](https://img.shields.io/github/license/raihan-rifat007/YouTube-API?style=flat-square)](LICENSE)
+[![Version](https://img.shields.io/badge/version-7.0.0-white?style=flat-square)](deno.json)
+
+<br/>
+
+[**Live Demo**](https://2nztm.raihan07.deno.net) · [API Docs](#-api-reference) · [Download Bug Fix](#-download-bug--root-cause--fix) · [Deploy](#-deployment)
 
 </div>
 
 ---
 
-## Table of Contents
+<details>
+<summary><b>Table of Contents</b></summary>
 
-- [Overview](#overview)
-- [Download Bug — Root Cause & Fix](#download-bug--root-cause--fix)
-- [Project Structure](#project-structure)
-- [Prerequisites](#prerequisites)
-- [Installation & Setup](#installation--setup)
-- [Environment Variables](#environment-variables)
-- [API Reference](#api-reference)
-- [UI Features](#ui-features)
-- [Architecture](#architecture)
-- [Deployment](#deployment)
-- [Troubleshooting](#troubleshooting)
-- [Contributing](#contributing)
+- [Overview](#-overview)
+- [Download Bug — Root Cause & Fix](#-download-bug--root-cause--fix)
+- [Project Structure](#-project-structure)
+- [Prerequisites](#-prerequisites)
+- [Setup](#-setup)
+- [API Reference](#-api-reference)
+- [UI Features](#-ui-features)
+- [Architecture](#-architecture)
+- [Deployment](#-deployment)
+- [Troubleshooting](#-troubleshooting)
+- [Contributing](#-contributing)
 
----
-
-## Overview
-
-YouTube Music API is a **Deno 2.0 + TypeScript** REST API that wraps YouTube Music's internal endpoints. It provides search, metadata, audio streaming URLs, synced lyrics (via LRCLib), and last.fm artist data — all without an API key. A built-in web UI (`ui.html`) lets you search, play, and download tracks directly in the browser.
-
-**Runtime:** Deno — not Node.js. Use `deno task dev` to start, not `npm run dev`.
+</details>
 
 ---
 
-## Download Bug — Root Cause & Fix
+## ✨ Overview
 
-### What was happening
+A **Deno 2.0 + TypeScript** REST API that wraps YouTube Music's internal `InnerTube` endpoints — no API key required. Ships with a built-in web UI (`ui.html`) featuring glassmorphism design, grid search results, audio player, and MP3 download.
 
-When the user clicked **Download**, the browser saved a file with `.webm` extension that contained **raw JSON text** instead of audio bytes.
+| Feature | Details |
+|---|---|
+| **Runtime** | Deno 2.0+ (not Node.js — use `deno task dev`, not `npm run dev`) |
+| **Auth** | Zero API keys needed |
+| **Search** | Songs, Albums, Artists, Playlists, Videos with autocomplete |
+| **Streaming** | Piped + Invidious multi-instance fallback |
+| **Download** | cobalt.tools → Piped → Invidious cascade; blob-based for correct filename |
+| **Lyrics** | Synced (LRC) + plain via LRCLib |
+| **Artist data** | Last.fm bio, listener count, tags |
+| **UI** | Liquid glass dark UI, grid cards, mini player, expanded player, lyrics panel |
 
-### Root cause (in `src/routes/stream.ts`)
+---
 
-The download handler tried Piped then Invidious to get a streaming URL. When **both services were unavailable** (which happens often — these are volunteer-run public instances), the handler returned early with:
+## 🐛 Download Bug — Root Cause & Fix
+
+> **Symptom:** clicking Download saved a `.json` file (or "Failed — No file" in Chrome)
+
+### Why it happened
+
+**Problem 1 — JSON body piped as audio**
+
+When Piped and Invidious instances were both unavailable, the old handler returned early:
 
 ```typescript
-// ❌ BUG — This sends a JSON body that the browser saves as the "audio" file
-if (!streamData) return json({ success: false, error: "Unable to find audio stream." }, 404);
+// ❌ OLD — sends JSON body; browser saves "Song.json" or "Song.webm" with JSON content
+if (!streamData) return json({ success: false, error: "No stream" }, 404);
 ```
 
-Even when a stream URL was found, if the upstream Piped/Invidious instance itself returned a JSON error body, the code piped that JSON straight to the client because it never validated `Content-Type` before streaming:
+Chrome ignores `a.download="Song.mp3"` when the server responds with
+`Content-Type: application/json`. It names the file using the detected type → `.json`.
+
+**Problem 2 — Unvalidated upstream responses**
+
+When a Piped/Invidious instance was degraded (returned an HTML error page instead of audio), the old code piped that HTML body straight to the client — no `Content-Type` check:
 
 ```typescript
-// ❌ BUG — No check: audioRes might contain JSON, not audio bytes
+// ❌ OLD — pipes HTML/JSON error page as if it were audio
 return new Response(audioRes.body, { status: 200, headers });
 ```
 
-Additionally, `ui.html` had the filename hardcoded as `.webm`:
+**Problem 3 — anchor-based download can't enforce filename across redirects**
 
 ```javascript
-// ❌ BUG — Promises MP3 but downloads webm (or JSON disguised as webm)
-a.download = (s.title || 'audio') + '.webm';
+// ❌ OLD — Chrome overrides a.download for cross-origin or non-2xx responses
+a.href = '/api/download?id=...';
+a.download = 'Song.mp3';
+a.click();
 ```
 
-### Fix applied
+### The Fix (3 layers)
 
-`src/routes/stream.ts` — `handleDownload` now has three layers:
+**`src/routes/stream.ts`** — `/api/download` now uses 302 redirects, never pipes:
 
 ```
-1. cobalt.tools API (primary)
-   └── POST https://api.cobalt.tools/
-       downloadMode: "audio", audioFormat: "mp3"
-       → Returns a direct MP3 stream URL
-       → Validate Content-Type is audio before piping
-       → Stream to client with Content-Type: audio/mpeg
-
-2. Piped / Invidious (fallback)
-   └── Same as before BUT now validates Content-Type
-       If response is application/json or text/html → reject, don't pipe
-
-3. Hard error
-   └── json({ success: false, error: "..." }, 404)
-       Never piped as a "download" — client receives a proper 404
+Request → /api/download?id=VIDEO_ID
+            │
+            ▼
+  Layer 1: cobalt.tools POST
+            │ success → 302 → cobalt tunnel/redirect URL (MP3)
+            │ fail ↓
+  Layer 2: Piped best audio URL
+            │ success → 302 → piped audio stream
+            │ fail ↓
+  Layer 3: Invidious /latest_version?itag=140 (m4a)
+            │ success → 302 → invidious direct audio
+            │ fail ↓
+  503 JSON  ← client fetch() sees !res.ok → shows toast, never saves file
 ```
 
-`ui.html` — filename fixed:
+**`ui.html`** — `fetchBlob()` replaces anchor clicks, forces correct filename:
 
 ```javascript
-// ✅ FIX
-a.download = (s.title || 'audio') + '.mp3';
+// ✅ NEW — fetch + blob + createObjectURL always honours a.download="Song.mp3"
+function fetchBlob(url, filename, cb) {
+  fetch(url)                               // follows the 302 redirect
+    .then(r => { if (!r.ok) throw r; return r.blob(); })
+    .then(blob => {
+      var burl = URL.createObjectURL(blob); // same-origin blob URL
+      var a = document.createElement('a');
+      a.href  = burl;
+      a.download = filename;               // "Song.mp3" — always used for blobs
+      a.click();
+      URL.revokeObjectURL(burl);
+    });
+}
 ```
+
+`createObjectURL()` creates a `blob:` URL — Chrome **always** uses `a.download` for blob URLs, regardless of content type or redirect history.
 
 ---
 
-## Project Structure
+## 📁 Project Structure
 
 ```
 YouTubeMusicAPI/
-├── main.ts                        # Deno HTTP server entry point
-├── ui.ts                          # Reads & caches ui.html for serving
-├── ui.html                        # Full web UI (search, player, download)
-├── deno.json                      # Tasks, name (@raihan07/youtube-api v7.0.0)
-├── deno.lock                      # Dependency lockfile
+├── main.ts                      # Deno.serve entry point + router
+├── ui.ts                        # Reads & caches ui.html for the / route
+├── ui.html                      # Full web UI (liquid glass, grid, player)
+├── deno.json                    # Tasks, permissions, import map
+├── deno.lock                    # Lockfile (commit this)
 ├── assets/
-│   └── Logo.png                   # App logo (served at /assets/Logo.png)
+│   └── Logo.png                 # App logo → served at /assets/Logo.png
 └── src/
     ├── helpers/
-    │   ├── response.ts            # json(), error(), corsHeaders helpers
-    │   ├── region.ts              # Geo/region detection helpers
-    │   └── router.ts              # Route pattern matching
+    │   ├── response.ts          # json(), error(), corsHeaders utilities
+    │   ├── region.ts            # Geo / region helpers
+    │   └── router.ts            # Lightweight URL pattern router
     ├── routes/
-    │   ├── search.ts              # /api/search, /api/search/suggestions, /api/yt_search
-    │   ├── content.ts             # /api/songs/:id, /api/albums/:id, /api/artists/:id, /api/playlists/:id
-    │   ├── discover.ts            # /api/home, /api/charts, /api/related/:id, /api/radio, /api/moods, /api/trending
-    │   ├── feed.ts                # Feed-related endpoints
-    │   ├── info.ts                # /api/lyrics, /api/artist/info, /api/track/info
-    │   └── stream.ts              # /api/stream, /api/download (fixed), /api/proxy, /api/music/find
+    │   ├── search.ts            # /api/search · /api/search/suggestions · /api/yt_search
+    │   ├── content.ts           # /api/songs/:id · /api/albums/:id · /api/artists/:id · /api/playlists/:id
+    │   ├── discover.ts          # /api/home · /api/charts · /api/related/:id · /api/radio · /api/moods · /api/trending
+    │   ├── feed.ts              # Feed endpoints
+    │   ├── info.ts              # /api/lyrics · /api/artist/info · /api/track/info
+    │   └── stream.ts            # /api/stream · /api/download (fixed) · /api/proxy · /api/music/find
     └── services/
-        ├── ytmusic.ts             # YouTube Music internal API wrapper
-        ├── ytmusic-parser.ts      # Response normalizer for YTMusic data
-        ├── youtube-search.ts      # YouTube video search (non-Music)
-        ├── streaming.ts           # Piped + Invidious stream fetchers
-        ├── lyrics.ts              # LRCLib integration (synced + plain lyrics)
-        ├── lastfm.ts              # Last.fm artist/track info
-        ├── discovery.ts           # Charts, radio, trending logic
-        └── entities.ts            # Combined entity fetching (song+artist+album)
+        ├── ytmusic.ts           # YouTube Music InnerTube wrapper
+        ├── ytmusic-parser.ts    # Response normaliser
+        ├── youtube-search.ts    # YouTube (non-Music) search
+        ├── streaming.ts         # Piped + Invidious instance rotator
+        ├── lyrics.ts            # LRCLib integration
+        ├── lastfm.ts            # Last.fm artist/track info
+        ├── discovery.ts         # Charts, radio, trending
+        └── entities.ts          # Combined entity resolver
 ```
 
 ---
 
-## Prerequisites
+## ✅ Prerequisites
 
-- **Deno 2.0+** — [install guide](https://docs.deno.com/runtime/getting_started/installation/)
-- No Node.js, no npm, no build step
+- **Deno 2.0+** — [deno.land/install](https://docs.deno.com/runtime/getting_started/installation/)
 
 ```bash
-# Check Deno version
+# Verify
 deno --version
+# deno 2.x.x (release, ...)
 ```
+
+No Node.js. No npm. No build step.
 
 ---
 
-## Installation & Setup
+## 🚀 Setup
 
 ```bash
 # Clone
@@ -157,301 +194,240 @@ cd YouTube-API
 # Cache dependencies
 deno cache main.ts
 
-# Development (auto-reload on file change)
+# Start (dev — file watcher)
 deno task dev
 
-# Production
+# Start (production)
 deno task start
 ```
 
-Server runs at `http://localhost:8000` by default.
+Open **http://localhost:8000**
 
----
-
-## Environment Variables
+### Environment
 
 ```bash
-PORT=8000    # HTTP port (default: 8000)
+PORT=8000   # default
 ```
 
-No API keys needed. Set `PORT` in your hosting environment or a `.env` file.
+No `.env` file needed beyond `PORT`.
 
 ---
 
-## API Reference
+## 📡 API Reference
 
-### Base URL
-```
-Local:      http://localhost:8000
-Production: https://youtube-api.deno.dev  (example)
-```
+**Base:** `http://localhost:8000` (local) or your deploy URL
 
-All responses return JSON: `{ success: true, ... }` or `{ success: false, error: "..." }`.
+All success responses: `{ success: true, ... }`  
+All error responses: `{ success: false, error: "..." }`
 
 ---
 
-### Search
+<details>
+<summary><b>Search</b></summary>
 
-#### `GET /api/search`
-Search YouTube Music.
+### `GET /api/search`
 
-| Param | Type | Required | Notes |
-|---|---|---|---|
-| `q` | string | yes | Search query |
-| `filter` | string | no | `songs`, `albums`, `artists`, `playlists`, `videos` |
-| `fallback` | `1` | no | Also tries YouTube video search if YTMusic fails |
+| Param | Required | Description |
+|---|---|---|
+| `q` | ✅ | Search query |
+| `filter` | ❌ | `songs` `albums` `artists` `playlists` `videos` |
+| `fallback` | ❌ | `1` — also tries YouTube search if YTMusic returns nothing |
 
+```bash
+curl "http://localhost:8000/api/search?q=blinding+lights&filter=songs"
 ```
-GET /api/search?q=coldplay&filter=songs
-```
 
-#### `GET /api/search/suggestions`
-Autocomplete suggestions.
+### `GET /api/search/suggestions`
 
-| Param | Type | Required |
-|---|---|---|
-| `q` | string | yes |
+| Param | Required |
+|---|---|
+| `q` | ✅ |
 
-#### `GET /api/yt_search`
-YouTube (non-Music) video search.
+### `GET /api/yt_search`
 
-| Param | Type | Required |
-|---|---|---|
-| `q` | string | yes |
+| Param | Required |
+|---|---|
+| `q` | ✅ |
+
+</details>
 
 ---
 
-### Content
+<details>
+<summary><b>Content</b></summary>
 
-#### `GET /api/songs/:videoId`
-Song metadata.
+### `GET /api/songs/:videoId`
+### `GET /api/albums/:browseId`
+### `GET /api/artists/:browseId`
+### `GET /api/playlists/:playlistId`
 
-#### `GET /api/albums/:browseId`
-Album details + track list.
-
-#### `GET /api/artists/:browseId`
-Artist page: top tracks, albums, singles.
-
-#### `GET /api/playlists/:playlistId`
-Playlist contents.
+</details>
 
 ---
 
-### Discovery
+<details>
+<summary><b>Discovery</b></summary>
 
-#### `GET /api/home`
-YouTube Music home feed (sections with recommendations).
+### `GET /api/home` — YouTube Music home feed
+### `GET /api/charts?country=BD` — Top charts (ISO country or `ZZ` = global)
+### `GET /api/related/:videoId` — Related tracks
+### `GET /api/radio?videoId=...` — Station seed
+### `GET /api/moods` — Mood/genre categories
+### `GET /api/trending?country=BD`
 
-#### `GET /api/charts`
-| Param | Type | Notes |
-|---|---|---|
-| `country` | string | ISO country code (default: `ZZ` = global) |
-
-#### `GET /api/related/:videoId`
-Related/recommended songs for a given track.
-
-#### `GET /api/radio`
-| Param | Type | Notes |
-|---|---|---|
-| `videoId` | string | Seed track |
-
-#### `GET /api/moods`
-Browse mood/genre categories.
-
-#### `GET /api/trending`
-| Param | Type | Notes |
-|---|---|---|
-| `country` | string | Country code |
+</details>
 
 ---
 
-### Streaming & Download
+<details>
+<summary><b>Streaming & Download</b></summary>
 
-#### `GET /api/stream`
-Returns audio stream URLs (from Piped/Invidious). Use these to play audio in the browser without downloading.
+### `GET /api/stream?id=VIDEO_ID`
 
-| Param | Type | Required |
-|---|---|---|
-| `id` | string | yes — YouTube video ID |
+Returns audio stream URLs from Piped/Invidious for browser playback.
 
 ```json
 {
   "success": true,
   "service": "piped",
   "streamingUrls": [
-    { "url": "https://...", "quality": "160k", "mimeType": "audio/webm", "bitrate": 160000 }
-  ],
-  "metadata": { "id": "...", "title": "...", "thumbnail": "..." }
+    { "url": "https://...", "mimeType": "audio/webm", "bitrate": 160000 }
+  ]
 }
 ```
 
-#### `GET /api/download` ⭐ Fixed
-Downloads audio as a file. Now tries cobalt.tools first for real MP3.
+---
 
-| Param | Type | Required |
+### `GET /api/download?id=VIDEO_ID&title=Song+Name` ⭐ Fixed
+
+Returns **HTTP 302** redirect to a working audio URL.  
+The client (`fetchBlob`) follows the redirect, loads as blob, saves with correct filename.
+
+| Layer | Source | Format |
 |---|---|---|
-| `id` | string | yes — YouTube video ID |
-| `title` | string | no — used for the filename |
+| 1 | cobalt.tools | MP3 |
+| 2 | Piped | WebM/Opus |
+| 3 | Invidious `/latest_version?itag=140` | M4A |
 
-**Response (success):**
-```
-Content-Type: audio/mpeg
-Content-Disposition: attachment; filename="Song Title.mp3"
-Body: binary audio stream
-```
-
-**Response (failure):**
-```json
-{ "success": false, "error": "Unable to find audio stream. Please try again later." }
-```
-
-Note: the failure case returns HTTP 404/502 and is **never** served as a download body. Previously this JSON was incorrectly streamed to the browser.
-
-#### `GET /api/proxy`
-CORS proxy for audio stream URLs. Adds proper CORS headers and supports `Range` requests for seeking.
-
-| Param | Type | Required |
-|---|---|---|
-| `url` | string | yes — direct audio stream URL |
-
-#### `GET /api/music/find`
-Find a song by name + artist (useful for matching across services).
-
-| Param | Type | Required |
-|---|---|---|
-| `name` | string | yes |
-| `artist` | string | yes |
+On total failure → `503 JSON` (never saved as a file by the client).
 
 ---
 
-### Info
+### `GET /api/proxy?url=AUDIO_URL`
 
-#### `GET /api/lyrics`
-Synced (LRC) or plain lyrics via LRCLib.
+CORS proxy with `Range` support for audio seeking.
 
-| Param | Type | Required |
-|---|---|---|
-| `title` | string | yes |
-| `artist` | string | yes |
+---
+
+### `GET /api/music/find?name=Song&artist=Artist`
+
+Fuzzy-matches a song across YouTube Music search results.
+
+</details>
+
+---
+
+<details>
+<summary><b>Info / Metadata</b></summary>
+
+### `GET /api/lyrics?title=...&artist=...`
 
 ```json
 {
   "success": true,
-  "syncedLyrics": "[00:14.32]Line one\n[00:18.00]Line two",
-  "plainLyrics": "Line one\nLine two"
+  "syncedLyrics": "[00:14.32]Line one\n...",
+  "plainLyrics": "Line one\n..."
 }
 ```
 
-#### `GET /api/artist/info`
-Last.fm artist biography, listener count, tags.
+### `GET /api/artist/info?artist=...` — Last.fm bio + stats
+### `GET /api/track/info?title=...&artist=...` — Last.fm track wiki
 
-| Param | Type | Required |
-|---|---|---|
-| `artist` | string | yes |
-
-#### `GET /api/track/info`
-Last.fm track stats, wiki summary.
-
-| Param | Type | Required |
-|---|---|---|
-| `title` | string | yes |
-| `artist` | string | yes |
+</details>
 
 ---
 
-### Utility
+<details>
+<summary><b>Utility</b></summary>
 
-#### `GET /health`
+### `GET /health`
+
 ```json
-{ "status": "ok", "version": "2.1.0" }
+{ "status": "ok", "version": "7.0.0" }
 ```
 
+</details>
+
 ---
 
-## UI Features
-
-The built-in web UI (`ui.html`) is served at `/` and includes:
+## 🖥 UI Features
 
 | Feature | Details |
 |---|---|
-| **Search** | Real-time debounced search with type filters (All / Songs / Albums / Artists / Playlists / Videos) |
-| **Grid / List toggle** | Switch between card grid view and compact list view |
-| **Color-coded type badges** | Blue = Song, Purple = Album, Green = Artist, Orange = Playlist, Red = Video |
-| **MP3 Download** | Per-card download button — now saves real `.mp3` (fixed) |
-| **Mini player** | Fixed bottom bar with thumbnail, title, progress, volume, shuffle, repeat |
-| **Expanded player** | Full-screen overlay with album art, synced lyrics, queue, related tracks |
-| **Discover** | Home feed and chart sections |
-| **API Docs tab** | Interactive endpoint tester built into the UI |
-| **Sidebar now playing** | Clickable mini card for the current track |
+| **Liquid glass design** | `backdrop-filter` blur on sidebar, cards, player, header |
+| **Grid / List toggle** | Switch between card grid and compact list; remembers per-session |
+| **HQ thumbnails** | Uses highest-res thumbnail from API; falls back `hqdefault → mqdefault` |
+| **Type badges** | Blue=Song · Purple=Album · Green=Artist · Orange=Playlist · Red=Video |
+| **MP3 download** | fetch+blob ensures correct `.mp3` filename every time |
+| **Mini player** | Fixed bottom bar: thumbnail, title, progress, volume, shuffle, repeat |
+| **Expanded player** | Full-screen: album art, synced rolling lyrics, queue, related tracks |
+| **Discover tab** | Home feed sections + chart lists |
+| **API Docs tab** | Interactive endpoint explorer built into the UI |
+| **Liked songs** | Sidebar panel; persists per-session |
 
 ---
 
-## Architecture
+## 🏗 Architecture
 
 ```
-Browser / Client
-      │
-      ▼
-main.ts  (Deno.serve — HTTP router)
-      │
-      ├── /                     → ui.ts → ui.html (web UI)
-      ├── /api/search           → routes/search.ts → services/ytmusic.ts
-      ├── /api/songs/:id        → routes/content.ts → services/entities.ts
-      ├── /api/albums/:id       → routes/content.ts → services/ytmusic.ts
-      ├── /api/artists/:id      → routes/content.ts → services/ytmusic.ts
-      ├── /api/playlists/:id    → routes/content.ts → services/ytmusic.ts
-      ├── /api/home             → routes/discover.ts → services/discovery.ts
-      ├── /api/charts           → routes/discover.ts → services/discovery.ts
-      ├── /api/stream           → routes/stream.ts → services/streaming.ts (Piped/Invidious)
-      ├── /api/download         → routes/stream.ts → cobalt.tools → Piped/Invidious fallback
-      ├── /api/proxy            → routes/stream.ts → fetch + CORS headers
-      ├── /api/lyrics           → routes/info.ts → services/lyrics.ts (LRCLib)
-      ├── /api/artist/info      → routes/info.ts → services/lastfm.ts
-      └── /health               → { status: "ok" }
-```
+Browser
+  │
+  └─ fetch('/api/download') → 302 redirect → audio URL
+       └─ blob() + createObjectURL() → a.download="Song.mp3" → Save ✓
 
-### Download pipeline (fixed)
-
-```
-/api/download?id=VIDEO_ID
-        │
-        ▼
-  cobalt.tools POST
-        │
-   ┌────┴────┐
-   │ success │ → fetch MP3 URL → validate Content-Type is audio → stream to client
-   └────┬────┘
-        │ fail (rate-limit, down)
-        ▼
-  fetchFromPiped(id) → try each Piped instance
-        │
-   ┌────┴────┐
-   │ success │ → fetch audio URL → validate Content-Type is audio → stream
-   └────┬────┘
-        │ fail
-        ▼
-  fetchFromInvidious(id) → try each Invidious instance
-        │
-   ┌────┴────┐
-   │ success │ → fetch audio URL → validate Content-Type is audio → stream
-   └────┬────┘
-        │ fail
-        ▼
-  json({ success: false, error: "..." }, 404)   ← NOT a download body
+Deno.serve (main.ts)
+  ├── /                     ui.ts → ui.html
+  ├── /api/search           routes/search.ts
+  │     └── services/ytmusic.ts (InnerTube)
+  ├── /api/songs|albums|artists|playlists
+  │     └── routes/content.ts → services/entities.ts
+  ├── /api/home|charts|related|radio|moods|trending
+  │     └── routes/discover.ts → services/discovery.ts
+  ├── /api/stream           routes/stream.ts
+  │     └── services/streaming.ts (Piped + Invidious rotation)
+  ├── /api/download         routes/stream.ts
+  │     ├── tryCobalt()     → cobalt.tools POST → 302
+  │     ├── tryPipedUrl()   → Piped best stream → 302
+  │     └── tryInvidiousUrl() → /latest_version → 302
+  ├── /api/proxy            routes/stream.ts (CORS + Range)
+  ├── /api/lyrics           routes/info.ts → services/lyrics.ts (LRCLib)
+  ├── /api/artist/info      routes/info.ts → services/lastfm.ts
+  └── /health               { status: "ok" }
 ```
 
 ---
 
-## Deployment
+## ☁️ Deployment
 
-### Deno Deploy (recommended)
+### Deno Deploy (recommended — free tier available)
 
 ```bash
 # Install deployctl
-deno install -A jsr:@deno/deployctl
+deno install -gArf jsr:@deno/deployctl
 
-# Deploy
+# Deploy from local
 deployctl deploy --project=youtube-api main.ts
+
+# Or link the GitHub repo in dash.deno.com → auto-deploys on push
+```
+
+### Railway
+
+```bash
+# In Railway dashboard:
+# Build command: (leave blank)
+# Start command: deno task start
+# Add env: PORT = $PORT
 ```
 
 ### Docker
@@ -466,75 +442,113 @@ CMD ["deno", "task", "start"]
 ```
 
 ```bash
-docker build -t ytmusic-api .
-docker run -p 8000:8000 ytmusic-api
+docker build -t ytmusic-api . && docker run -p 8000:8000 ytmusic-api
 ```
 
-### Railway / Render / Fly.io
+### Fly.io
 
-Set start command to:
-```
-deno task start
-```
+```toml
+# fly.toml
+app = "ytmusic-api"
+primary_region = "sin"
 
-Set `PORT` environment variable to match the platform's expected port.
+[build]
+  dockerfile = "Dockerfile"
+
+[[services]]
+  internal_port = 8000
+  protocol = "tcp"
+  [[services.ports]]
+    port = 443
+    handlers = ["tls", "http"]
+```
 
 ---
 
-## Troubleshooting
+## 🛠 Troubleshooting
 
-### Download saves as `.webm` with JSON content
-Update to the fixed `src/routes/stream.ts`. The old code piped non-audio responses to the client. The new code validates `Content-Type` before streaming and uses cobalt.tools as the primary source.
+<details>
+<summary><b>Download saves as .json or says "Failed — No file"</b></summary>
 
-### Piped / Invidious instances failing
-These are volunteer-run public instances with no SLA. The streaming service rotates through a list defined in `src/services/streaming.ts`. If all fail, cobalt.tools (the primary) takes over. To add more instances, edit the `PIPED_INSTANCES` array in `streaming.ts`.
+The server-side fix is in `src/routes/stream.ts`. The UI fix is in `ui.html` (`fetchBlob` function).  
+Make sure both files are updated. The old anchor-click approach is completely replaced.
 
-### `deno: command not found`
-Install Deno: `curl -fsSL https://deno.land/install.sh | sh`
+</details>
 
-### `--allow-net` permission error
-Make sure you run via `deno task dev` or `deno task start`. These already include all required permission flags.
+<details>
+<summary><b>cobalt.tools not working</b></summary>
 
-### Port already in use
+cobalt.tools is a free public service — it can be rate-limited or temporarily down. The download handler automatically falls through to Piped then Invidious. If all three fail, try again in a few minutes.
+
+To check cobalt manually:
+```bash
+curl -X POST https://api.cobalt.tools/ \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json" \
+  -d '{"url":"https://www.youtube.com/watch?v=dQw4w9WgXcQ","downloadMode":"audio","audioFormat":"mp3"}'
+```
+
+</details>
+
+<details>
+<summary><b>Piped / Invidious instances failing</b></summary>
+
+These are volunteer-run instances with no SLA. The `streaming.ts` service rotates through a list automatically. You can add more working instances to the arrays in `src/services/streaming.ts`.
+
+Public instance lists:
+- Piped: https://piped.video/instances
+- Invidious: https://api.invidious.io/instances.json
+
+</details>
+
+<details>
+<summary><b>`deno: command not found`</b></summary>
+
+```bash
+curl -fsSL https://deno.land/install.sh | sh
+# Then reload shell: source ~/.bashrc or source ~/.zshrc
+```
+
+</details>
+
+<details>
+<summary><b>Port already in use</b></summary>
+
 ```bash
 PORT=8001 deno task start
 ```
 
+</details>
+
 ---
 
-## Contributing
+## 🤝 Contributing
 
 ```bash
-# Fork & clone
-git clone https://github.com/raihan-rifat007/YouTube-API.git
+# Fork → clone
+git clone https://github.com/your-fork/YouTube-API.git
 cd YouTube-API
 
-# Create branch
+# Branch
 git checkout -b feat/your-feature
 
-# Lint & format before committing
+# Lint + format (required before PR)
 deno lint
 deno fmt
 
-# Commit with conventional commits
+# Commit — use Conventional Commits
 git commit -m "feat: add new endpoint"
 
-# Push & open PR
+# Push + open PR against main
 git push origin feat/your-feature
 ```
 
 ---
 
-## License
-
-MIT © [raihan07](mailto:raihanrifat9721@gmail.com)
-
----
-
 <div align="center">
 
-Built with Deno + TypeScript · No API keys · Deploys anywhere
+**Built with Deno · TypeScript · No API keys · Deploys anywhere**
 
-[GitHub](https://github.com/raihan-rifat007/YouTube-API) · [Email](mailto:raihanrifat9721@gmail.com)
+Made by [raihan07](mailto:raihanrifat9721@gmail.com) — [@raihan-rifat007](https://github.com/raihan-rifat007)
 
 </div>
