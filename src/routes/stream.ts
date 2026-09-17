@@ -206,4 +206,4 @@ export async function handleMusicFind(searchParams: URLSearchParams, ytmusic: YT
   });
   if (match) return json({ success: true, data: match });
   return json({ success: false, error: "Could not find the requested song." }, 404);
-}
+        }
